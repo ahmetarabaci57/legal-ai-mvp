@@ -14,7 +14,7 @@ if backend_dir not in sys.path:
 
 from langgraph.graph import StateGraph, END
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 
 load_dotenv()
 
@@ -61,6 +61,31 @@ def retrieval_node(state: LegalMVPState):
     return {"retrieved_docs": docs}
 
 def analysis_node(state: LegalMVPState):
+    # Fetch the Groq Key from the Environment context variables
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key or api_key.startswith("GECICI") or "your-actual-key" in api_key:
+        raise ValueError("Missing or unconfigured Groq/OpenAI credentials.")
+        
+    # Launch the native high-speed Groq model engine directly
+    # This automatically handles the base paths and completely bypasses the 405 routing error
+    llm = ChatGroq(
+        model="llama-3.1-8b-instant", 
+        temperature=0,
+        groq_api_key=api_key
+    )
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "Sen kıdemli bir hukuk yapay zeka asistanısın. Sana verilen sözleşmeyi, referans kanun maddelerine göre analiz et ve varsa riskleri/uyumsuzlukları Türkçe raporla."),
+        ("user", "Referans Kanun Maddesi:\n{docs}\n\nİncelenecek Sözleşme Metni:\n{contract}")
+    ])
+    
+    chain = prompt | llm
+    response = chain.invoke({
+        "docs": "\n".join(state["retrieved_docs"]),
+        "contract": state["contract_text"]
+    })
+    return {"analysis_report": response.content}
+    
     # Safe check: if API key is missing or is a placeholder, trigger fallback to protect the session
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key or api_key.startswith("GECICI") or "your-actual-key" in api_key:
