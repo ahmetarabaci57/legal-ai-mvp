@@ -1,19 +1,7 @@
 import os
-import sys
-
-# Bulunduğumuz main.py'nin iki üst klasörünü (yani backend dizinini) sys.path'e zorla ekliyoruz
-current_dir = os.path.dirname(os.path.abspath(__file__))
-backend_dir = os.path.abspath(os.path.join(current_dir, ".."))
-
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
-
-
-import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from app.workflow import legal_mvp_graph
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -52,8 +40,8 @@ async def analyze(request: AnalysisRequest):
         "analysis_report": ""
     }
     
-    # LangGraph orkestrasyonunu tetikleme
-    result = legal_mvp_graph.invoke(initial_state)
+    # main.py içinde derlediğin grafik nesnesinin adıyla çağır:
+    result = legal_mvp_graph.invoke(initial_state) 
     
     return {
         "report": result["analysis_report"],
