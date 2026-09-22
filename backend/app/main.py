@@ -69,9 +69,9 @@ def analysis_node(state: LegalMVPState):
     # Launch the native high-speed Groq model engine directly
     # This automatically handles the base paths and completely bypasses the 405 routing error
     llm = ChatGroq(
-        model="llama-3.1-8b-instant", 
+        model="llama-3.1-8b", 
         temperature=0,
-        groq_api_key=api_key
+        groq_api_key="https://groq.com"
     )
     
     prompt = ChatPromptTemplate.from_messages([
@@ -90,14 +90,7 @@ def analysis_node(state: LegalMVPState):
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key or api_key.startswith("GECICI") or "your-actual-key" in api_key:
         raise ValueError("Missing or unconfigured Groq/OpenAI credentials.")
-        
-    # Using ChatOpenAI package wired to Groq's high-speed Llama 3.1 8B endpoint infrastructure
-    # Open backend/app/main.py and replace your ChatOpenAI initializer line with this:
-    llm = ChatOpenAI(
-        model="llama-3.1-8b", 
-        temperature=0,
-        openai_api_base="https://groq.com"  # Forces explicit explicit routing pass
-    )
+
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", "Sen kıdemli bir hukuk yapay zeka asistanısın. Sana verilen sözleşmeyi, referans kanun maddelerine göre analiz et ve varsa riskleri/uyumsuzlukları Türkçe raporla."),
