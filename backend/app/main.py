@@ -94,7 +94,7 @@ def analysis_node(state: LegalMVPState):
     # Using ChatOpenAI package wired to Groq's high-speed Llama 3.1 8B endpoint infrastructure
     # Open backend/app/main.py and replace your ChatOpenAI initializer line with this:
     llm = ChatOpenAI(
-        model="llama-3.1-8b-instant", 
+        model=""llama-3.1-8b", 
         temperature=0,
         openai_api_base="https://groq.com"  # Forces explicit explicit routing pass
     )
