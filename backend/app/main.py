@@ -66,10 +66,9 @@ def analysis_node(state: LegalMVPState):
     if not api_key or api_key.startswith("GECICI") or "your-actual-key" in api_key:
         raise ValueError("Missing or unconfigured Groq/OpenAI credentials.")
         
-    # Launch the native high-speed Groq model engine directly
-    # This automatically handles the base paths and completely bypasses the 405 routing error
+    # Open backend/app/main.py and update the model string to Groq's exact flagship id:
     llm = ChatGroq(
-        model="llama-3.1-8b", 
+        model="llama3-8b-8192",  # <-- Swapped to Groq's exact production catalog ID
         temperature=0,
         groq_api_key=api_key
     )
