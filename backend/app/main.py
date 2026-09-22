@@ -67,7 +67,12 @@ def analysis_node(state: LegalMVPState):
         raise ValueError("Missing or unconfigured Groq/OpenAI credentials.")
         
     # Using ChatOpenAI package wired to Groq's high-speed Llama 3.1 8B endpoint infrastructure
-    llm = ChatOpenAI(model="llama-3.1-8b-instant", temperature=0)
+    # Open backend/app/main.py and replace your ChatOpenAI initializer line with this:
+    llm = ChatOpenAI(
+        model="llama-3.1-8b-instant", 
+        temperature=0,
+        openai_api_base="https://groq.com"  # Forces explicit explicit routing pass
+    )
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", "Sen kıdemli bir hukuk yapay zeka asistanısın. Sana verilen sözleşmeyi, referans kanun maddelerine göre analiz et ve varsa riskleri/uyumsuzlukları Türkçe raporla."),
