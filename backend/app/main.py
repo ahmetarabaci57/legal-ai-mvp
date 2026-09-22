@@ -71,7 +71,7 @@ def analysis_node(state: LegalMVPState):
     llm = ChatGroq(
         model="llama-3.1-8b", 
         temperature=0,
-        groq_api_key="https://groq.com"
+        groq_api_key=api_key
     )
     
     prompt = ChatPromptTemplate.from_messages([
