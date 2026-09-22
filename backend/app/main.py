@@ -66,9 +66,9 @@ def analysis_node(state: LegalMVPState):
     if not api_key or api_key.startswith("GECICI") or "your-actual-key" in api_key:
         raise ValueError("Missing or unconfigured Groq/OpenAI credentials.")
         
-    # Open backend/app/main.py and update the model string to Groq's exact flagship id:
-      llm = ChatGroq(
-        model="qwen/qwen3.8-27b",  # <-- Groq'un şu anki en güncel ücretsiz üretim modeli
+    # MAKE SURE THESE 5 LINES ARE PERFECTLY INDENTED WITH 4 SPACES (OR ONE TAB):
+    llm = ChatGroq(
+        model="qwen/qwen3.8-27b",
         temperature=0,
         groq_api_key=api_key
     )
