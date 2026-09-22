@@ -67,8 +67,8 @@ def analysis_node(state: LegalMVPState):
         raise ValueError("Missing or unconfigured Groq/OpenAI credentials.")
         
     # Open backend/app/main.py and update the model string to Groq's exact flagship id:
-    llm = ChatGroq(
-        model="llama3-8b-8192",  # <-- Swapped to Groq's exact production catalog ID
+      llm = ChatGroq(
+        model="qwen/qwen3.8-27b",  # <-- Groq'un şu anki en güncel ücretsiz üretim modeli
         temperature=0,
         groq_api_key=api_key
     )
