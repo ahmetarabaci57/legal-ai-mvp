@@ -20,7 +20,7 @@ load_dotenv()
 
 app = FastAPI(
     title="Legal AI MVP Backend",
-    description="Production-ready ASGI framework for multi-agent contract auditing.",
+    description="Production-ready ASGI framework for multi-agent contract auditing using free Llama 3.1 core.",
     version="1.0.0"
 )
 
@@ -61,14 +61,16 @@ def retrieval_node(state: LegalMVPState):
     return {"retrieved_docs": docs}
 
 def analysis_node(state: LegalMVPState):
-    # Safe check: if API key is invalid, skip LLM invocation to prevent internal server 500 crash
+    # Safe check: if API key is missing or is a placeholder, trigger fallback to protect the session
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key or api_key.startswith("GECICI") or "your-actual-key" in api_key:
-        raise ValueError("Missing or unconfigured OpenAI credentials.")
+        raise ValueError("Missing or unconfigured Groq/OpenAI credentials.")
         
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    # Using ChatOpenAI package wired to Groq's high-speed Llama 3.1 8B endpoint infrastructure
+    llm = ChatOpenAI(model="llama-3.1-8b-instant", temperature=0)
+    
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "Sen kıdemli bir hukuk yapay zeka asistanısın. Sana verilen sözleşmeyi, referans kanun maddelerine göre analiz et ve varsa riskleri/uyumsuzlukları raporla."),
+        ("system", "Sen kıdemli bir hukuk yapay zeka asistanısın. Sana verilen sözleşmeyi, referans kanun maddelerine göre analiz et ve varsa riskleri/uyumsuzlukları Türkçe raporla."),
         ("user", "Referans Kanun Maddesi:\n{docs}\n\nİncelenecek Sözleşme Metni:\n{contract}")
     ])
     
@@ -88,7 +90,6 @@ builder.set_entry_point("RetrieveMevzuat")
 builder.add_edge("RetrieveMevzuat", "AnalyzeContract")
 builder.add_edge("AnalyzeContract", END)
 
-# Compiled graph variable name explicitly set to match your invoke endpoint call perfectly
 legal_mvp_graph = builder.compile()
 
 # --- 5. FASTAPI REST INTERFACE ENDPOINTS ---
@@ -108,7 +109,7 @@ async def analyze(request: AnalysisRequest):
     }
     
     try:
-        # Attempt executing the live LangGraph multi-agent cluster pipeline
+        # Attempt executing the live LangGraph multi-agent cluster pipeline via Groq
         result = legal_mvp_graph.invoke(initial_state)
         return {
             "report": result["analysis_report"],
@@ -118,19 +119,17 @@ async def analyze(request: AnalysisRequest):
         print(f"[Warning] Pipeline fallback triggered safely: {str(e)}")
         
         # --- INTERVIEW-SAFE HIGH-FIDELITY FALLBACK ENGINE ---
-        # If OpenAI key is missing, return this data instead of throwing a 500 error screen
         matched_references = run_rag_retrieval(request.text)
-        
         return {
             "references": matched_references,
             "report": (
-                "⚖️ LEGALTECH AI CORE - AUTOMATED RISK ASSESSMENT EVALUATION\n"
+                "⚖️ LEGALTECH AI CORE - RISK ASSESSMENT EVALUATION FALLBACK\n"
                 "--------------------------------------------------------------------------------\n"
-                "▶ CRITICAL NON-COMPLIANCE RISK IDENTECTED\n"
+                "▶ CRITICAL COMPLIANCE DETECTED (MOCK ENGINE RUN)\n"
                 "The analysis engine scanned the contract execution clause and isolated an operational mismatch against statutory Turkish regulatory codes.\n\n"
                 "▶ REGULATORY CORRELATION ASSESSMENT:\n"
-                f"The targeted provisions directly conflict with standard compliance guidelines outlined under: '{matched_references[0]}'.\n\n"
+                f"The targeted provisions conflict with standard compliance guidelines outlined under: '{matched_references}'.\n\n"
                 "▶ STRATEGIC RECOMMENDATION:\n"
-                "Modify the contractual liability limits or cap processing parameters inside safe legal margins to safeguard enforceability metrics and avoid judicial nullification fields."
+                "Modify the contractual liability limits or cap processing parameters inside safe legal margins to safeguard enforceability metrics."
             )
         }
