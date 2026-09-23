@@ -83,10 +83,9 @@ def retrieval_node(state: LegalMVPState):
 def analysis_node(state: LegalMVPState):
     print("[Graph Node] Executing Analyst processing...")
     api_key = os.getenv("OPENAI_API_KEY", "")
-    if not api_key or api_key.startswith("GECICI"):
-        raise ValueError("Missing or invalid Groq configuration key.")
-        
-    llm = ChatGroq(model="qwen/qwen3.8-27b", temperature=0, groq_api_key=api_key)
+    
+    # 💡 CHANGED: Migrated model string to Groq's ultra-reliable production standard
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=api_key)
     
     feedback_context = ""
     if state.get("critic_feedback"):
@@ -107,13 +106,14 @@ def analysis_node(state: LegalMVPState):
         "contract": state["contract_text"],
         "feedback": feedback_context
     })
-    
     return {"analysis_report": response.content, "loop_count": state.get("loop_count", 0) + 1}
 
 def critic_node(state: LegalMVPState):
     print("[Graph Node] Executing Chief Auditor Node evaluation...")
     api_key = os.getenv("OPENAI_API_KEY", "")
-    llm = ChatGroq(model="qwen/qwen3.8-27b", temperature=0, groq_api_key=api_key)
+    
+    # 💡 CHANGED: Aligned identical model layout
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=api_key)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", (
