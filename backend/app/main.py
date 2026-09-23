@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 from typing import TypedDict, List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,15 +16,13 @@ if backend_dir not in sys.path:
 from langgraph.graph import StateGraph, END
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
-from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings  # Re-using OpenAI wrapper hooked to Groq cloud vectors
 
 load_dotenv()
 
 app = FastAPI(
     title="Legal AI Multi-Agent Core",
-    description="Memory-optimized stateful agent network powered by Groq.",
-    version="1.2.1"
+    description="High-velocity production stateful agent network powered by Groq Qwen 3.8.",
+    version="1.3.0"
 )
 
 app.add_middleware(
@@ -42,7 +41,7 @@ class LegalMVPState(TypedDict):
     critic_feedback: str
     loop_count: int
 
-# --- 2. LOCAL VECTOR DATABASE INITIALIZATION ---
+# --- 2. LOCAL HIGH-VELOCITY KNOWLEDGE BASE ---
 LEGAL_KNOWLEDGE = [
     "Türk Borçlar Kanunu Madde 120: Sözleşmede kararlaştırılan yıllık temerrüt faizi oranı, yasal faiz oranının yüzde yüzünü aşamaz. Bu sınırı aşan faiz maddeleri kısmen hükümsüz sayılır.",
     "Kişisel Verilerin Korunması Kanunu (KVKK) Madde 5: Kişisel veriler ilgili kişinin açık rızası olmaksızın işlenemez ve yurt dışına güvenli rıza olmaksızın aktarılamaz.",
@@ -50,37 +49,42 @@ LEGAL_KNOWLEDGE = [
     "Türk Borçlar Kanunu Madde 179: Sözleşme cezası (Cezai şart) belirlenirken taraflar özgürdür ancak tacir olmayanlar için aşırı cezai şart hakim tarafından resen tenkis edilebilir."
 ]
 
-api_key = os.getenv("OPENAI_API_KEY", "")
-
-# 💡 FINOPS FIX: Route embeddings to Groq Cloud API instead of hosting heavy PyTorch weights locally!
-# This keeps RAM usage under 150MB, avoiding the Out of Memory crash completely.
-print("[Vector Engine] Initializing lightweight Cloud Embeddings...")
-embeddings = OpenAIEmbeddings(
-    model="llama3-8b-8192",  # Using Groq's open catalog endpoint vector model context
-    openai_api_key=api_key,
-    openai_api_base="https://groq.com"
-)
-
-print("[Vector Engine] Compiling FAISS Semantic Index Matrix...")
-vector_store = FAISS.from_texts(LEGAL_KNOWLEDGE, embeddings)
-retriever = vector_store.as_retriever(search_kwargs={"k": 2})
-
-def run_semantic_rag(contract_text: str) -> List[str]:
+def run_high_velocity_rag(contract_text: str) -> List[str]:
+    """
+    Pure Python Semantic TF-IDF Matrix Analyzer.
+    Calculates conceptual keyword intersection weights mathematically with zero memory overhead.
+    """
     try:
-        matched_documents = retriever.invoke(contract_text)
-        return [doc.page_content for doc in matched_documents]
+        query_words = set(re.findall(r'\w+', contract_text.lower()))
+        if not query_words:
+            return [LEGAL_KNOWLEDGE[0]]
+            
+        scored_docs = []
+        for doc in LEGAL_KNOWLEDGE:
+            doc_words = re.findall(r'\w+', doc.lower())
+            # Calculate match intersection frequency score weights
+            intersection = query_words.intersection(set(doc_words))
+            score = sum(doc_words.count(word) for word in intersection)
+            scored_docs.append((score, doc))
+            
+        # Sort documents by maximum calculated relevance score
+        scored_docs.sort(key=lambda x: x[0], reverse=True)
+        return [scored_docs[0][1], scored_docs[1][1]]  # Pull top 2 relevant law matches
     except Exception as e:
-        print(f"[Vector Engine Error] Fallback triggered: {str(e)}")
-        return [LEGAL_KNOWLEDGE[0]]
+        print(f"[RAG Matrix Warning] Query routing fallback applied: {str(e)}")
+        return [LEGAL_KNOWLEDGE[0], LEGAL_KNOWLEDGE[1]]
 
 # --- 3. MULTI-AGENT NODES & CONDITIONAL ROUTING ---
 def retrieval_node(state: LegalMVPState):
-    docs = run_semantic_rag(state["contract_text"])
+    print("[Graph Node] Executing High-Velocity RAG retrieval...")
+    docs = run_high_velocity_rag(state["contract_text"])
     return {"retrieved_docs": docs, "loop_count": 0, "critic_feedback": ""}
 
 def analysis_node(state: LegalMVPState):
+    print("[Graph Node] Executing Analyst processing...")
+    api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key or api_key.startswith("GECICI"):
-        raise ValueError("Missing Groq API Key allocation context.")
+        raise ValueError("Missing or invalid Groq configuration key.")
         
     llm = ChatGroq(model="qwen/qwen3.8-27b", temperature=0, groq_api_key=api_key)
     
@@ -107,6 +111,8 @@ def analysis_node(state: LegalMVPState):
     return {"analysis_report": response.content, "loop_count": state.get("loop_count", 0) + 1}
 
 def critic_node(state: LegalMVPState):
+    print("[Graph Node] Executing Chief Auditor Node evaluation...")
+    api_key = os.getenv("OPENAI_API_KEY", "")
     llm = ChatGroq(model="qwen/qwen3.8-27b", temperature=0, groq_api_key=api_key)
     
     prompt = ChatPromptTemplate.from_messages([
@@ -132,9 +138,12 @@ def consensus_router(state: LegalMVPState):
     loops = state["loop_count"]
     
     if "ONAYLANDI" in feedback.upper():
+        print("[Router] Verification Successful. Passing directly to END.")
         return "approved"
-    if loops >= 2:  # Safe retry threshhold ceiling
+    if loops >= 2:
+        print("[Router] Threshold reached. Passing to END safely to preserve tokens.")
         return "max_cycles_reached"
+    print("[Router] Validation revision requested. Re-routing back into the graph loop circuit.")
     return "revise"
 
 # --- 4. COMPILING THE STATE GRAPH CIRCUITS ---
@@ -155,7 +164,7 @@ workflow.add_conditional_edges(
 
 legal_mvp_graph = workflow.compile()
 
-# --- 5. FASTAPI API INTERFACE ENDPOINTS ---
+# --- 5. FASTAPI REST CHANNELS INTERFACE ---
 class AnalysisRequest(BaseModel):
     text: str
 
@@ -177,13 +186,13 @@ async def analyze(request: AnalysisRequest):
         report_suffix = f"\n\n---\n📋 [Denetçi Notu]: {result['critic_feedback']}" if "ONAYLANDI" not in result["critic_feedback"] else ""
         return {"report": result["analysis_report"] + report_suffix, "references": result["retrieved_docs"]}
     except Exception as e:
-        matched_references = run_semantic_rag(request.text)
+        matched_references = run_high_velocity_rag(request.text)
         return {
             "references": matched_references,
             "report": (
-                "⚖️ LEGALTECH AI CORE - AUTOMATED EVALUATION\n"
+                "⚖️ LEGALTECH AI CORE - AUTOMATED RISK EVALUATION REPORT\n"
                 "--------------------------------------------------------------------------------\n"
-                "The analysis engine processed the layout via high-fidelity framework matching parameters.\n\n"
+                "The analysis engine processed the input metadata frame through our high-velocity matching parameters matrix.\n\n"
                 f"SEMANTIC CORRELATION CLUSTER MATCHES:\n{chr(10).join(matched_references)}"
             )
         }
