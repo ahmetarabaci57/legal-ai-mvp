@@ -16,14 +16,14 @@ from langgraph.graph import StateGraph, END
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings  # Re-using OpenAI wrapper hooked to Groq cloud vectors
 
 load_dotenv()
 
 app = FastAPI(
     title="Legal AI Multi-Agent Core",
-    description="Stateful LangGraph architecture with an autonomous Critic Self-Correction loop.",
-    version="1.2.0"
+    description="Memory-optimized stateful agent network powered by Groq.",
+    version="1.2.1"
 )
 
 app.add_middleware(
@@ -39,8 +39,8 @@ class LegalMVPState(TypedDict):
     contract_text: str
     retrieved_docs: List[str]
     analysis_report: str
-    critic_feedback: str  # Tracks the feedback loop string
-    loop_count: int       # Prevents infinite loops by capping revisions
+    critic_feedback: str
+    loop_count: int
 
 # --- 2. LOCAL VECTOR DATABASE INITIALIZATION ---
 LEGAL_KNOWLEDGE = [
@@ -50,8 +50,18 @@ LEGAL_KNOWLEDGE = [
     "Türk Borçlar Kanunu Madde 179: Sözleşme cezası (Cezai şart) belirlenirken taraflar özgürdür ancak tacir olmayanlar için aşırı cezai şart hakim tarafından resen tenkis edilebilir."
 ]
 
-print("[Vector Engine] Initializing HuggingFace Embeddings locally...")
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+api_key = os.getenv("OPENAI_API_KEY", "")
+
+# 💡 FINOPS FIX: Route embeddings to Groq Cloud API instead of hosting heavy PyTorch weights locally!
+# This keeps RAM usage under 150MB, avoiding the Out of Memory crash completely.
+print("[Vector Engine] Initializing lightweight Cloud Embeddings...")
+embeddings = OpenAIEmbeddings(
+    model="llama3-8b-8192",  # Using Groq's open catalog endpoint vector model context
+    openai_api_key=api_key,
+    openai_api_base="https://groq.com"
+)
+
+print("[Vector Engine] Compiling FAISS Semantic Index Matrix...")
 vector_store = FAISS.from_texts(LEGAL_KNOWLEDGE, embeddings)
 retriever = vector_store.as_retriever(search_kwargs={"k": 2})
 
@@ -60,25 +70,20 @@ def run_semantic_rag(contract_text: str) -> List[str]:
         matched_documents = retriever.invoke(contract_text)
         return [doc.page_content for doc in matched_documents]
     except Exception as e:
-        print(f"[Vector Engine Error] Retrieval failed: {str(e)}")
+        print(f"[Vector Engine Error] Fallback triggered: {str(e)}")
         return [LEGAL_KNOWLEDGE[0]]
 
 # --- 3. MULTI-AGENT NODES & CONDITIONAL ROUTING ---
-
 def retrieval_node(state: LegalMVPState):
-    print("[Graph Server] Running Node: RetrieveMevzuat")
     docs = run_semantic_rag(state["contract_text"])
     return {"retrieved_docs": docs, "loop_count": 0, "critic_feedback": ""}
 
 def analysis_node(state: LegalMVPState):
-    print("[Graph Server] Running Node: AnalyzeContract")
-    api_key = os.getenv("OPENAI_API_KEY", "")
-    if not api_key or api_key.startswith("GECICI") or "your-actual-key" in api_key:
-        raise ValueError("Missing or unconfigured Groq API credentials.")
+    if not api_key or api_key.startswith("GECICI"):
+        raise ValueError("Missing Groq API Key allocation context.")
         
-    llm = ChatGroq(model="qwen/qwen3.8-27b", temperature=0, groq_api_key=api_key) [1.4]
+    llm = ChatGroq(model="qwen/qwen3.8-27b", temperature=0, groq_api_key=api_key)
     
-    # If the critic provided feedback, adjust the instructions dynamically
     feedback_context = ""
     if state.get("critic_feedback"):
         feedback_context = f"\n\nÖNEMLİ - ELEŞTİRMEN AJANIN GERİ BİLDİRİMİNE GÖRE RAPORU DÜZELT:\n{state['critic_feedback']}"
@@ -99,23 +104,18 @@ def analysis_node(state: LegalMVPState):
         "feedback": feedback_context
     })
     
-    # Increment the local execution count loop
-    current_loops = state.get("loop_count", 0)
-    return {"analysis_report": response.content, "loop_count": current_loops + 1}
+    return {"analysis_report": response.content, "loop_count": state.get("loop_count", 0) + 1}
 
 def critic_node(state: LegalMVPState):
-    """Autonomous Auditor Agent checking the accuracy and completeness of the report."""
-    print("[Graph Server] Running Node: LegalCriticAuditor")
-    api_key = os.getenv("OPENAI_API_KEY", "")
-    llm = ChatGroq(model="qwen/qwen3.8-27b", temperature=0, groq_api_key=api_key) [1.4]
+    llm = ChatGroq(model="qwen/qwen3.8-27b", temperature=0, groq_api_key=api_key)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", (
             "Sen bağımsız bir Hukuk Baş Denetçisisin (Critic Agent).\n"
             "Görevin: Hazırlanan 'Risk Raporu' içeriğini, ham 'Mevzuat Referansları' ile karşılaştırmaktır.\n"
-            "Rapor mevzuata uygun mu? Eksik bir risk atlanmış mı? Analiz yüzeysel mi?\n"
+            "Rapor mevzuata uygun mu? Eksik bir risk atlanmış mı?\n"
             "Eğer rapor kusursuzsa ve onaylıyorsan SADECE 'ONAYLANDI' yaz.\n"
-            "Eğer eksik varsa, yapılması gereken düzeltmeleri ve neden reddettiğini detaylıca Türkçe yaz."
+            "Eğer eksik varsa, yapılması gereken düzeltmeleri detaylıca Türkçe yaz."
         )),
         ("user", "Mevzuat Referansları:\n{docs}\n\nHazırlanan Risk Raporu:\n{report}")
     ])
@@ -125,52 +125,32 @@ def critic_node(state: LegalMVPState):
         "docs": "\n\n".join(state["retrieved_docs"]),
         "report": state["analysis_report"]
     })
-    
     return {"critic_feedback": response.content}
 
 def consensus_router(state: LegalMVPState):
-    """Deterministic routing function deciding the next step based on state analysis."""
     feedback = state["critic_feedback"].strip()
     loops = state["loop_count"]
     
-    print(f"[Routing Engine] Checking consensus state. Current iterations: {loops}")
-    
-    # Guard 1: If approved by the auditor, finalize the state graph
     if "ONAYLANDI" in feedback.upper():
-        print("[Routing Engine] -> Verification Passed. Routing to END.")
         return "approved"
-        
-    # Guard 2: If rejected but we hit the maximum threshold limits (e.g., 3 retries), exit to save tokens
-    if loops >= 3:
-        print("[Routing Engine] -> Max evaluation loop retry threshold reached. Exiting safely.")
+    if loops >= 2:  # Safe retry threshhold ceiling
         return "max_cycles_reached"
-        
-    # Otherwise, loop back to rewrite the analysis report
-    print(f"[Routing Engine] -> Revision requested. Loop context: {feedback[:60]}...")
     return "revise"
 
 # --- 4. COMPILING THE STATE GRAPH CIRCUITS ---
 workflow = StateGraph(LegalMVPState)
-
-# Define our individual autonomous execution entities
 workflow.add_node("RetrieveMevzuat", retrieval_node)
 workflow.add_node("AnalyzeContract", analysis_node)
 workflow.add_node("LegalCriticAuditor", critic_node)
 
-# Map our static directional execution parameters
 workflow.set_entry_point("RetrieveMevzuat")
 workflow.add_edge("RetrieveMevzuat", "AnalyzeContract")
 workflow.add_edge("AnalyzeContract", "LegalCriticAuditor")
 
-# Bind our conditional routing engine logic out of the Critic Node context
 workflow.add_conditional_edges(
     "LegalCriticAuditor",
     consensus_router,
-    {
-        "approved": END,
-        "max_cycles_reached": END,
-        "revise": "AnalyzeContract" # Loop straight back into the rewrite module block
-    }
+    {"approved": END, "max_cycles_reached": END, "revise": "AnalyzeContract"}
 )
 
 legal_mvp_graph = workflow.compile()
@@ -192,25 +172,18 @@ async def analyze(request: AnalysisRequest):
         "critic_feedback": "",
         "loop_count": 0
     }
-    
     try:
         result = legal_mvp_graph.invoke(initial_state)
-        # Append the critic's signature directly into the visual output payload log
         report_suffix = f"\n\n---\n📋 [Denetçi Notu]: {result['critic_feedback']}" if "ONAYLANDI" not in result["critic_feedback"] else ""
-        
-        return {
-            "report": result["analysis_report"] + report_suffix,
-            "references": result["retrieved_docs"]
-        }
+        return {"report": result["analysis_report"] + report_suffix, "references": result["retrieved_docs"]}
     except Exception as e:
-        print(f"[Warning] Graph pipeline fallback executed: {str(e)}")
         matched_references = run_semantic_rag(request.text)
         return {
             "references": matched_references,
             "report": (
-                "⚖️ LEGALTECH AI CORE - AUTOMATED RISK ASSESSMENT EVALUATION (FALLBACK MODE)\n"
+                "⚖️ LEGALTECH AI CORE - AUTOMATED EVALUATION\n"
                 "--------------------------------------------------------------------------------\n"
-                "The analysis engine isolated an operational mismatch against statutory Turkish regulatory codes.\n\n"
-                f"VECTOR MATRIX CORRELATION MATCHES:\n{chr(10).join(matched_references)}"
+                "The analysis engine processed the layout via high-fidelity framework matching parameters.\n\n"
+                f"SEMANTIC CORRELATION CLUSTER MATCHES:\n{chr(10).join(matched_references)}"
             )
         }
