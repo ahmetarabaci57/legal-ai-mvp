@@ -186,6 +186,9 @@ async def analyze(request: AnalysisRequest):
         report_suffix = f"\n\n---\n📋 [Denetçi Notu]: {result['critic_feedback']}" if "ONAYLANDI" not in result["critic_feedback"] else ""
         return {"report": result["analysis_report"] + report_suffix, "references": result["retrieved_docs"]}
     except Exception as e:
+        # 🚀 İŞTE ARIZANIN KÖK NEDENİNİ GÖSTERECEK SİHİRLİ LOG SATIRI:
+        print(f"[CRITICAL GRAPH ERROR] LangGraph execution failed: {str(e)}")
+        
         matched_references = run_high_velocity_rag(request.text)
         return {
             "references": matched_references,
