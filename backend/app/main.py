@@ -15,14 +15,14 @@ if backend_dir not in sys.path:
 
 from langgraph.graph import StateGraph, END
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 load_dotenv()
 
 app = FastAPI(
     title="Legal AI Multi-Agent Core",
-    description="High-velocity production stateful agent network powered by Groq Qwen 3.8.",
-    version="1.3.0"
+    description="100% Free Production stateful agent network powered by Google Gemini.",
+    version="1.4.0"
 )
 
 app.add_middleware(
@@ -50,29 +50,22 @@ LEGAL_KNOWLEDGE = [
 ]
 
 def run_high_velocity_rag(contract_text: str) -> List[str]:
-    """
-    Pure Python Semantic TF-IDF Matrix Analyzer.
-    Calculates conceptual keyword intersection weights mathematically with zero memory overhead.
-    """
     try:
         query_words = set(re.findall(r'\w+', contract_text.lower()))
         if not query_words:
-            return [LEGAL_KNOWLEDGE[0]]
+            return LEGAL_KNOWLEDGE[:2]
             
         scored_docs = []
         for doc in LEGAL_KNOWLEDGE:
             doc_words = re.findall(r'\w+', doc.lower())
-            # Calculate match intersection frequency score weights
             intersection = query_words.intersection(set(doc_words))
             score = sum(doc_words.count(word) for word in intersection)
             scored_docs.append((score, doc))
             
-        # Sort documents by maximum calculated relevance score
         scored_docs.sort(key=lambda x: x[0], reverse=True)
-        return [scored_docs[0][1], scored_docs[1][1]]  # Pull top 2 relevant law matches
+        return [scored_docs[0][1], scored_docs[1][1]]
     except Exception as e:
-        print(f"[RAG Matrix Warning] Query routing fallback applied: {str(e)}")
-        return [LEGAL_KNOWLEDGE[0], LEGAL_KNOWLEDGE[1]]
+        return LEGAL_KNOWLEDGE[:2]
 
 # --- 3. MULTI-AGENT NODES & CONDITIONAL ROUTING ---
 def retrieval_node(state: LegalMVPState):
@@ -82,10 +75,10 @@ def retrieval_node(state: LegalMVPState):
 
 def analysis_node(state: LegalMVPState):
     print("[Graph Node] Executing Analyst processing...")
-    api_key = os.getenv("OPENAI_API_KEY", "")
+    # LangChain Gemini uses the GOOGLE_API_KEY environment variable automatically
+    api_key = os.getenv("GOOGLE_API_KEY", "")
     
-    # 🎯 Configured to your active developer tier catalog model
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=api_key)
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=api_key)
     
     feedback_context = ""
     if state.get("critic_feedback"):
@@ -110,10 +103,8 @@ def analysis_node(state: LegalMVPState):
 
 def critic_node(state: LegalMVPState):
     print("[Graph Node] Executing Chief Auditor Node evaluation...")
-    api_key = os.getenv("OPENAI_API_KEY", "")
-    
-    # 🎯 Mirroring the identical active catalog asset
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=api_key)
+    api_key = os.getenv("GOOGLE_API_KEY", "")
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=api_key)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", (
@@ -138,12 +129,9 @@ def consensus_router(state: LegalMVPState):
     loops = state["loop_count"]
     
     if "ONAYLANDI" in feedback.upper():
-        print("[Router] Verification Successful. Passing directly to END.")
         return "approved"
     if loops >= 2:
-        print("[Router] Threshold reached. Passing to END safely to preserve tokens.")
         return "max_cycles_reached"
-    print("[Router] Validation revision requested. Re-routing back into the graph loop circuit.")
     return "revise"
 
 # --- 4. COMPILING THE STATE GRAPH CIRCUITS ---
@@ -164,7 +152,7 @@ workflow.add_conditional_edges(
 
 legal_mvp_graph = workflow.compile()
 
-# --- 5. FASTAPI REST CHANNELS INTERFACE ---
+# --- 5. FASTAPI REST INTERFACE ENDPOINTS ---
 class AnalysisRequest(BaseModel):
     text: str
 
@@ -186,9 +174,7 @@ async def analyze(request: AnalysisRequest):
         report_suffix = f"\n\n---\n📋 [Denetçi Notu]: {result['critic_feedback']}" if "ONAYLANDI" not in result["critic_feedback"] else ""
         return {"report": result["analysis_report"] + report_suffix, "references": result["retrieved_docs"]}
     except Exception as e:
-        # 🚀 İŞTE ARIZANIN KÖK NEDENİNİ GÖSTERECEK SİHİRLİ LOG SATIRI:
         print(f"[CRITICAL GRAPH ERROR] LangGraph execution failed: {str(e)}")
-        
         matched_references = run_high_velocity_rag(request.text)
         return {
             "references": matched_references,
