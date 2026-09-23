@@ -84,8 +84,8 @@ def analysis_node(state: LegalMVPState):
     print("[Graph Node] Executing Analyst processing...")
     api_key = os.getenv("OPENAI_API_KEY", "")
     
-    # 💡 CHANGED: Migrated model string to Groq's ultra-reliable production standard
-    llm = ChatGroq(model="llama-3.3-70b-specdec", temperature=0, groq_api_key=api_key)
+    # 🎯 Configured to your active developer tier catalog model
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=api_key)
     
     feedback_context = ""
     if state.get("critic_feedback"):
@@ -112,8 +112,8 @@ def critic_node(state: LegalMVPState):
     print("[Graph Node] Executing Chief Auditor Node evaluation...")
     api_key = os.getenv("OPENAI_API_KEY", "")
     
-    # 💡 CHANGED: Aligned identical model layout
-    llm = ChatGroq(model="llama-3.3-70b-specdec", temperature=0, groq_api_key=api_key)
+    # 🎯 Mirroring the identical active catalog asset
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=api_key)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", (
