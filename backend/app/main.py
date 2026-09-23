@@ -78,7 +78,7 @@ def analysis_node(state: LegalMVPState):
     # LangChain Gemini uses the GOOGLE_API_KEY environment variable automatically
     api_key = os.getenv("GOOGLE_API_KEY", "")
     
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=api_key)
+    llm = ChatGoogleGenerativeAI(model="gemini-3.8-flash", temperature=0, google_api_key=api_key)
     
     feedback_context = ""
     if state.get("critic_feedback"):
@@ -104,7 +104,7 @@ def analysis_node(state: LegalMVPState):
 def critic_node(state: LegalMVPState):
     print("[Graph Node] Executing Chief Auditor Node evaluation...")
     api_key = os.getenv("GOOGLE_API_KEY", "")
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=api_key)
+    llm = ChatGoogleGenerativeAI(model="gemini-3.8-flash", temperature=0, google_api_key=api_key)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", (
