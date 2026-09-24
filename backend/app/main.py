@@ -14,6 +14,8 @@ if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
 from langgraph.graph import StateGraph, END
+# 💡 UPGRADE: Import the production-grade state snapshot Checkpointer 
+from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -21,8 +23,8 @@ load_dotenv()
 
 app = FastAPI(
     title="Legal AI Multi-Agent Core",
-    description="100% Free Production stateful agent network powered by Google Gemini.",
-    version="1.4.0"
+    description="Stateful agent network powered by Google Gemini and persistent state checkpointers.",
+    version="1.5.0"
 )
 
 app.add_middleware(
@@ -62,8 +64,8 @@ def run_high_velocity_rag(contract_text: str) -> List[str]:
             score = sum(doc_words.count(word) for word in intersection)
             scored_docs.append((score, doc))
             
-        scored_docs.sort(key=lambda x: x[0], reverse=True)
-        return [scored_docs[0][1], scored_docs[1][1]]
+        scored_docs.sort(key=lambda x: x, reverse=True)
+        return [scored_docs, scored_docs]
     except Exception as e:
         return LEGAL_KNOWLEDGE[:2]
 
@@ -75,7 +77,6 @@ def retrieval_node(state: LegalMVPState):
 
 def analysis_node(state: LegalMVPState):
     print("[Graph Node] Executing Analyst processing...")
-    # LangChain Gemini uses the GOOGLE_API_KEY environment variable automatically
     api_key = os.getenv("GOOGLE_API_KEY", "")
     
     llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0, google_api_key=api_key)
@@ -86,9 +87,19 @@ def analysis_node(state: LegalMVPState):
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", (
-            "Sen kıdemli bir kurumsal hukuk risk denetçisisin.\n"
-            "Sana sağlanan 'Mevzuat Referansları' verisini temel alarak sözleşmeyi analiz et.\n"
-            "Varsa riskleri/uyumsuzlukları Türkçe raporla. Halüsinasyon görme.{feedback}"
+            "Sen dünya standartlarında kıdemli bir kurumsal hukuk risk denetçisi ve yapay zeka mimarısın.\n"
+            "Sana sağlanan 'Mevzuat Referansları' verisini temel alarak sözleşmeyi analiz et.\n\n"
+            "Senden çıktıyı MUTLAKA şu markdown şablonuna göre üretmeni istiyorum:\n"
+            "### 📊 GENEL RİSK SKORU: [0-100 arası bir sayı] / 100 - [DÜŞÜK / ORTA / YÜKSEK]\n"
+            "--- \n"
+            "### ❌ TESPİT EDİLEN UYUMSUZLUKLAR\n"
+            "#### [Kanun Adı ve Madde Numarası]\n"
+            "- **Risk Tanımı:** [Sözleşmedeki hatalı cümle]\n"
+            "- **Hukuki Analiz:** [Detaylı Türkçe analiz]\n"
+            "- **Risk Seviyesi:** [Düşük / Orta / Yüksek]\n"
+            "- **🔄 ÖNERİLEN REVİZE METİN (REDLINE):** \n"
+            "```text\n[Buraya avukatın doğrudan kopyalayıp sözleşmeye yapıştırabileceği, kanuna tamamen uygun hale getirilmiş mükemmel Türkçe madde metnini yaz]\n```\n"
+            "---"
         )),
         ("user", "Mevzuat Referansları:\n{docs}\n\nİncelenecek Sözleşme Metni:\n{contract}")
     ])
@@ -134,7 +145,10 @@ def consensus_router(state: LegalMVPState):
         return "max_cycles_reached"
     return "revise"
 
-# --- 4. COMPILING THE STATE GRAPH CIRCUITS ---
+# --- 4. COMPILING THE STATE GRAPH WITH PERSISTENT STORAGE MEMORY ---
+# We initialize the checkpointer storage instance
+memory_checkpoint = MemorySaver()
+
 workflow = StateGraph(LegalMVPState)
 workflow.add_node("RetrieveMevzuat", retrieval_node)
 workflow.add_node("AnalyzeContract", analysis_node)
@@ -150,15 +164,13 @@ workflow.add_conditional_edges(
     {"approved": END, "max_cycles_reached": END, "revise": "AnalyzeContract"}
 )
 
-legal_mvp_graph = workflow.compile()
+# 💡 UPGRADE: Compile the final graph using the persistent memory manager!
+legal_mvp_graph = workflow.compile(checkpointer=memory_checkpoint)
 
 # --- 5. FASTAPI REST INTERFACE ENDPOINTS ---
 class AnalysisRequest(BaseModel):
     text: str
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "environment": "production"}
+    thread_id: str = "default-session"  # Tracks individual conversation streams
 
 @app.post("/api/analyze")
 async def analyze(request: AnalysisRequest):
@@ -169,8 +181,13 @@ async def analyze(request: AnalysisRequest):
         "critic_feedback": "",
         "loop_count": 0
     }
+    
+    # 💡 UPGRADE: Supply the session configuration context to LangGraph!
+    # This instructs the state machine to read/write state parameters to your memory pool.
+    config = {"configurable": {"thread_id": request.thread_id}}
+    
     try:
-        result = legal_mvp_graph.invoke(initial_state)
+        result = legal_mvp_graph.invoke(initial_state, config=config)
         report_suffix = f"\n\n---\n📋 [Denetçi Notu]: {result['critic_feedback']}" if "ONAYLANDI" not in result["critic_feedback"] else ""
         return {"report": result["analysis_report"] + report_suffix, "references": result["retrieved_docs"]}
     except Exception as e:
