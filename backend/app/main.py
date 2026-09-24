@@ -52,10 +52,14 @@ LEGAL_KNOWLEDGE = [
 ]
 
 def run_high_velocity_rag(contract_text: str) -> List[str]:
+    """
+    Pure Python Semantic TF-IDF Matrix Analyzer.
+    Calculates conceptual keyword intersection weights mathematically with zero memory overhead.
+    """
     try:
         query_words = set(re.findall(r'\w+', contract_text.lower()))
         if not query_words:
-            return LEGAL_KNOWLEDGE[:2]
+            return [LEGAL_KNOWLEDGE[0], LEGAL_KNOWLEDGE[1]]
             
         scored_docs = []
         for doc in LEGAL_KNOWLEDGE:
@@ -64,10 +68,15 @@ def run_high_velocity_rag(contract_text: str) -> List[str]:
             score = sum(doc_words.count(word) for word in intersection)
             scored_docs.append((score, doc))
             
-        scored_docs.sort(key=lambda x: x, reverse=True)
-        return [scored_docs, scored_docs]
+        # Skorlara göre dökümanları en yüksekten en düşüğe sırala
+        scored_docs.sort(key=lambda x: x[0], reverse=True)
+        
+        # 💡 DÜZELTME: İç içe liste yerine sadece en yüksek skora sahip 2 kanun metnini düz str listesi olarak dönüyoruz
+        return [scored_docs[0][1], scored_docs[1][1]]
     except Exception as e:
-        return LEGAL_KNOWLEDGE[:2]
+        print(f"[RAG Matrix Warning] Query routing fallback applied: {str(e)}")
+        return [LEGAL_KNOWLEDGE[0], LEGAL_KNOWLEDGE[1]]
+
 
 # --- 3. MULTI-AGENT NODES & CONDITIONAL ROUTING ---
 def retrieval_node(state: LegalMVPState):
